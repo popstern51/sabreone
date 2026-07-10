@@ -1,0 +1,27 @@
+# SabreOne — Netlify config (static site, no build step)
+[build]
+  publish = "."
+  command = ""
+
+# SPA-ish fallback: serve index.html for unknown paths without extension
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+# Long-cache static assets, no-cache for HTML so updates go live instantly
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
