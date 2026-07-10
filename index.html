@@ -1680,6 +1680,7 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   // >>> JOSEPH: PASTE YOUR PAYMENT LINK HERE (Stripe/PayPal "Buy Pro"/"Buy Team") <<<
   const PAY_LINK_PRO = "";   // e.g. "https://buy.stripe.com/xxx" or PayPal checkout URL
   const PAY_LINK_TEAM = "";  // e.g. "https://paypal.me/yourname/49"
+  const CONTACT_EMAIL = "jortiz92770@gmail.com";  // Joseph: swap to hello@sabreone.com once the domain is registered
   function payNowApp(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in the PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' variable in index.html.'); return; }

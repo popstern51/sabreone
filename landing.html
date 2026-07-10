@@ -218,7 +218,7 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
     <p>Launch the app free, or talk to us about a custom agent setup for your business.</p>
     <div class="hero-cta">
       <a href="index.html" class="btn btn-w btn-lg">Launch AI Agents ToGo →</a>
-      <a href="mailto:hello@sabreone.com" class="btn btn-o">hello@sabreone.com</a>
+      <a id="contactEmail" href="mailto:jortiz92770@gmail.com" class="btn btn-o">jortiz92770@gmail.com</a>
     </div>
   </div>
 </section>
@@ -241,6 +241,8 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
   // >>> JOSEPH: PASTE YOUR PAYMENT LINK HERE (Stripe/PayPal "Buy Pro"/"Buy Team") <<<
   const PAY_LINK_PRO = "";   // e.g. "https://buy.stripe.com/xxx" or PayPal checkout URL
   const PAY_LINK_TEAM = "";  // e.g. "https://paypal.me/yourname/49"
+  const CONTACT_EMAIL = "jortiz92770@gmail.com";  // Joseph: swap to hello@sabreone.com once the domain is registered
+  var _ce = document.getElementById('contactEmail'); if(_ce){ _ce.href = 'mailto:' + CONTACT_EMAIL; _ce.textContent = CONTACT_EMAIL; }
   function payNow(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in the PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' variable in landing.html.'); return; }
