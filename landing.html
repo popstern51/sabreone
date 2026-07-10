@@ -179,7 +179,7 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
         <li>Document export (PDF, Word, Excel…)</li>
         <li>Local data persistence</li>
       </ul>
-      <a href="index.html" class="btn btn-o w100">Get started</a>
+      <a href="#" onclick="openPay('pro','Pro');return false;" class="btn btn-o w100">Get started</a>
     </div>
     <div class="plan glass featured">
       <div class="pname" style="color:var(--gold);">Pro</div>
@@ -193,7 +193,7 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
         <li>Voice input &amp; read-aloud</li>
         <li>Priority feature drops</li>
       </ul>
-      <a href="index.html" class="btn btn-w w100">Go Pro</a>
+      <a href="#" onclick="openPay('pro','Pro');return false;" class="btn btn-w w100">Go Pro</a>
     </div>
     <div class="plan glass">
       <div class="pname">Team</div>
@@ -236,5 +236,34 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
   </div>
 </footer>
 
+<!-- SabreOne revenue: configurable payment link. Joseph pastes his Stripe/PayPal link below. -->
+<script>
+  // >>> JOSEPH: PASTE YOUR PAYMENT LINK HERE (Stripe/PayPal "Buy Pro"/"Buy Team") <<<
+  const PAY_LINK_PRO = "";   // e.g. "https://buy.stripe.com/xxx" or PayPal checkout URL
+  const PAY_LINK_TEAM = "";  // e.g. "https://paypal.me/yourname/49"
+  function payNow(tier){
+    const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
+    if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in the PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' variable in landing.html.'); return; }
+    window.open(link, '_blank');
+  }
+</script>
+
+<!-- Upgrade modal -->
+<div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(5,15,35,.8);backdrop-filter:blur(6px);z-index:999;align-items:center;justify-content:center;">
+  <div style="background:#0f2a5c;border:1px solid rgba(255,255,255,.15);border-radius:18px;padding:32px;max-width:420px;width:90%;text-align:center;">
+    <h3 style="font-size:22px;margin-bottom:10px;font-weight:400;">Upgrade to <span id="payTier">Pro</span></h3>
+    <p style="color:rgba(255,255,255,.7);font-size:14px;margin-bottom:20px;">You'll be taken to our secure checkout. SabreOne™ is offered by a NJ sole proprietor — your receipt is your record.</p>
+    <button onclick="payNow(document.getElementById('payTier').dataset.tier)" style="background:#fff;color:#0a1e3f;border:none;padding:13px 30px;border-radius:99px;font-size:14px;cursor:pointer;font-family:'Barlow';">Continue to checkout →</button>
+    <div style="margin-top:14px;"><a onclick="document.getElementById('payModal').style.display='none'" style="color:rgba(255,255,255,.45);font-size:12px;cursor:pointer;">Cancel</a></div>
+  </div>
+</div>
+
+<script>
+  function openPay(tier,label){
+    document.getElementById('payTier').textContent = label;
+    document.getElementById('payTier').dataset.tier = tier;
+    document.getElementById('payModal').style.display = 'flex';
+  }
+</script>
 </body>
 </html>

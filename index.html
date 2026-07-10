@@ -199,6 +199,15 @@ textarea{resize:none;}
         <option value="mixtral-8x7b-32768">Mixtral 8x7B (Balanced, Free)</option>
       </select>
       <button class="btn btn-w w100" onclick="saveSettings()" style="margin-bottom:22px;">Save AI Settings</button>
+
+      <div class="divider"></div>
+
+      <div class="label" style="margin-bottom:10px;">⭐ Upgrade</div>
+      <div style="background:rgba(224,185,79,.08);border:1px solid rgba(224,185,79,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:400;color:var(--gold);margin-bottom:6px;">SabreOne™ Pro — $19/mo</div>
+        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM, email outreach, voice. Offered by a NJ sole proprietor.</div>
+        <button class="btn btn-w w100" onclick="openPayApp('pro','Pro')">Upgrade to Pro →</button>
+      </div>
       
       <div class="divider"></div>
       
@@ -1665,6 +1674,18 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   if(window.speechSynthesis)window.speechSynthesis.getVoices();
   rHome();
 })();
+</script>
+<!-- SabreOne revenue: configurable payment link. Joseph pastes his Stripe/PayPal link below. -->
+<script>
+  // >>> JOSEPH: PASTE YOUR PAYMENT LINK HERE (Stripe/PayPal "Buy Pro"/"Buy Team") <<<
+  const PAY_LINK_PRO = "";   // e.g. "https://buy.stripe.com/xxx" or PayPal checkout URL
+  const PAY_LINK_TEAM = "";  // e.g. "https://paypal.me/yourname/49"
+  function payNowApp(tier){
+    const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
+    if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in the PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' variable in index.html.'); return; }
+    window.open(link, '_blank');
+  }
+  function openPayApp(tier,label){ payNowApp(tier); }
 </script>
 </body>
 </html>
