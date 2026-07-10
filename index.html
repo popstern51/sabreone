@@ -1675,15 +1675,13 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   rHome();
 })();
 </script>
-<!-- SabreOne revenue: configurable payment link. Joseph pastes his Stripe/PayPal link below. -->
+<!-- SabreOne config: loads editable settings from config.js (Joseph edits that file) -->
+<script src="config.js"></script>
 <script>
-  // >>> JOSEPH: PASTE YOUR PAYMENT LINK HERE (Stripe/PayPal "Buy Pro"/"Buy Team") <<<
-  const PAY_LINK_PRO = "";   // e.g. "https://buy.stripe.com/xxx" or PayPal checkout URL
-  const PAY_LINK_TEAM = "";  // e.g. "https://paypal.me/yourname/49"
-  const CONTACT_EMAIL = "jortiz92770@gmail.com";  // Joseph: swap to hello@sabreone.com once the domain is registered
+  // >>> JOSEPH: edit config.js (not this file) to set your payment links + email <<<
   function payNowApp(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
-    if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in the PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' variable in index.html.'); return; }
+    if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' in config.js.'); return; }
     window.open(link, '_blank');
   }
   function openPayApp(tier,label){ payNowApp(tier); }
