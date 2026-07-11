@@ -3,6 +3,12 @@
   publish = "."
   command = ""
 
+# Serve the marketing landing page at the bare domain (app lives at /index.html)
+[[redirects]]
+  from = "/"
+  to = "/landing.html"
+  status = 200
+
 # SPA-ish fallback: serve index.html for unknown paths without extension
 [[redirects]]
   from = "/*"
