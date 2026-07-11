@@ -1267,7 +1267,6 @@ function activateAgent(xg,lvl){
   </div>`;
   setTimeout(async()=>{
     const a={id:Date.now(),ag,name:nm,tasks:[...S.tasks],img:S.imgs[ag.id]||null,xp:xg,level:lvl,deployed:new Date().toLocaleDateString(),activities:[]};
-    a.activities=genActs(a);
     S.agents.push(a);S.xp+=xg;S.sd++;checkA();
     S.picked=null;S.nm='';S.tasks=[];S.cat='sch';S.bundle=null;
     await persist();
@@ -1404,7 +1403,7 @@ function rIntTab(tc){
 function selAg(id){S.sel=S.sel?.id===id?null:S.agents.find(a=>a.id===id);rDashTab();}
 function cloneAgent(id){
   const src=S.agents.find(a=>a.id===id);if(!src)return;
-  const clone={...src,id:Date.now(),name:src.name+' (copy)',tasks:[...src.tasks],activities:genActs({...src,name:src.name+' (copy)'})};
+  const clone={...src,id:Date.now(),name:src.name+' (copy)',tasks:[...src.tasks],activities:[]};
   S.agents.push(clone);persist();toast(`${clone.name} created`);rDash();
 }
 
@@ -1431,7 +1430,7 @@ function rDetail(){
     <div class="divider"></div>
     <div class="label" style="margin-bottom:9px;">Recent activity</div>
     <div style="max-height:170px;overflow-y:auto;margin-bottom:13px;">
-      ${a.activities.slice(0,6).map(act=>`<div class="ai"><div class="adt"></div><div style="flex:1;font-size:11px;font-weight:300;color:rgba(255,255,255,.65);">${escapeHtml(act.text)}</div><div style="font-size:10px;font-weight:300;color:var(--t3);">${ago(act.ts)}</div></div>`).join('')}
+      ${a.activities.length?a.activities.slice(0,6).map(act=>`<div class="ai"><div class="adt"></div><div style="flex:1;font-size:11px;font-weight:300;color:rgba(255,255,255,.65);">${escapeHtml(act.text)}</div><div style="font-size:10px;font-weight:300;color:var(--t3);">${ago(act.ts)}</div></div>`).join(''):`<div style="font-size:11px;font-weight:300;color:var(--t3);padding:6px 0;">No activity yet — start a chat or assign a task.</div>`}
     </div>
     <div class="label" style="margin-bottom:9px;">Tasks (${a.tasks.length})</div>
     <div style="display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto;margin-bottom:13px;">
@@ -1582,6 +1581,8 @@ async function send(){
     addMsg('agent',response);
   }
   CH.push({role:'assistant',content:response});
+  // Honest activity log: only real user-initiated interactions are recorded
+  if(CA){CA.activities.unshift({text:`Chat: ${txt.slice(0,60)}${txt.length>60?'…':''}`,ts:Date.now(),catId:CA.tasks[0]?.catId,agentId:CA.id,agentName:CA.name});CA.activities=CA.activities.slice(0,20);}
   
   // If research was requested in demo mode, trigger actual research
   if(isResearch&&AI_MODE==='demo'){
