@@ -3,18 +3,13 @@
   publish = "."
   command = ""
 
-# Serve the marketing landing page at the bare domain (app lives at /index.html)
+# Serve the marketing landing page at the bare domain (app lives at /index.html).
+# force=true makes this win over Netlify's default index.html directory index.
 [[redirects]]
   from = "/"
   to = "/landing.html"
   status = 200
-
-# SPA-ish fallback: serve index.html for unknown paths without extension
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-  force = false
+  force = true
 
 # Long-cache static assets, no-cache for HTML so updates go live instantly
 [[headers]]
