@@ -1691,7 +1691,8 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   function payNowApp(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' in config.js.'); return; }
-    window.open(link, '_blank');
+    // Navigate in the same tab so the user clearly lands on the correct checkout
+    window.location.href = link;
   }
   function openPayApp(tier,label){ payNowApp(tier); }
 </script>

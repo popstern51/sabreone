@@ -263,7 +263,8 @@ footer{padding:50px 0 40px;border-top:1px solid rgba(255,255,255,.1);}
   function payNow(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' in config.js.'); return; }
-    window.open(link, '_blank');
+    // Navigate in the same tab so the user clearly lands on the correct checkout (no stacked-tab confusion)
+    window.location.href = link;
   }
 </script>
 
