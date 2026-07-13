@@ -1085,7 +1085,7 @@ function demoAI(userMsg,agent){
         const result=await researchWeb(query);
         if(result.success){
           renderResearchResults(result.results,query);
-          addMsg('agent',`I found ${result.results.length} sources on "${query}". See the research card above. Would you like me to compile this into a PDF report?`);
+          addMsg('agent',`I found ${result.results.length} sources on "${query}". I can turn this into a PDF report — just type "export pdf" or click the 📄 icon in the chat footer.`);
         }else{
           addMsg('agent',`I couldn't find results for "${query}". Try a different search term.`);
         }
@@ -1096,7 +1096,7 @@ function demoAI(userMsg,agent){
   
   if(msg.includes('spreadsheet')||msg.includes('report')||msg.includes('tracker')||msg.includes('data')){
     const sheetData={title:'Weekly Activity Report',headers:['Date','Task','Status','Notes'],rows:[[new Date().toLocaleDateString(),'Email follow-ups','Completed','Sent 12 messages'],[new Date(Date.now()-86400000).toLocaleDateString(),'Meeting prep','In progress','Q3 review materials'],[new Date(Date.now()-172800000).toLocaleDateString(),'Lead research','Completed','Added 8 prospects'],[new Date(Date.now()-259200000).toLocaleDateString(),'Content draft','Pending','Blog post outline'],[new Date(Date.now()-345600000).toLocaleDateString(),'Calendar review','Completed','Blocked focus time'],[new Date(Date.now()-432000000).toLocaleDateString(),'Proposal review','In progress','Client feedback pending']]};
-    return`Here's your weekly activity report.\n\nSPREADSHEET_DATA:${JSON.stringify(sheetData)}\n\n💡 Click the 📄 icon in the chat footer to export this as PDF, Word, Excel, or PowerPoint.`;
+    return`Here's your weekly activity report.\n\nSPREADSHEET_DATA:${JSON.stringify(sheetData)}\n\n💡 I can export this as a real file — type "export pdf" or click the 📄 icon in the chat footer (PDF, Word, Excel, or PowerPoint).`;
   }
   if(msg.includes('email')&&(msg.includes('send')||msg.includes('draft')||msg.includes('compose'))){
     if(isEmailConfigured())return`I can send that email for you. Click the ✉️ icon in the chat footer to open the composer.`;
@@ -1613,7 +1613,7 @@ function buildPrompt(){
   return`You are ${CA.name}, a professional AI assistant. Role: ${ag.title}. Specialty: ${ag.spec}. Communication style: ${ag.chatStyle}. Focus questions on: ${ag.qFocus}.
 Active tasks (${CA.tasks.length}): ${CA.tasks.map(t=>'• '+t.label).join('\n')}
 ${isEmailConfigured()?`EMAIL: The user has email configured. When asked to send/draft emails, offer to help compose and remind them to use the email composer (✉️ icon).`:'EMAIL: Email is not configured yet.'}
-CAPABILITIES: You can help users research topics (they can ask you to "research" or "look up" anything), export conversations/data as PDF, Word, Excel, PowerPoint, Markdown, or Text files via the 📄 icon.
+CAPABILITIES: You CAN produce real downloadable files — PDF, Word, Excel, PowerPoint, Markdown, or Text — using the 📄 export menu in the chat footer (or by telling the user to type "export pdf"). Never say you cannot generate or display files; you can. When the user asks for a report, PDF, document, or export, tell them you'll generate it and instruct them to click 📄 or type "export pdf". You can also research any topic (user can say "research" or "look up" anything).
 RULES: Professional, direct, business-focused tone. 3–5 sentences per response. Reference actual assigned tasks. Be specific. ALWAYS end with ONE precise follow-up question.
 SPREADSHEET: When asked for any report, output: SPREADSHEET_DATA: {"title":"Title","headers":["Col 1","Col 2","Col 3","Col 4"],"rows":[["val","val","val","val"]]} with 6–8 realistic rows. End with a follow-up question.
 NEVER: recite personality, use game language, assume without asking.`;
@@ -1622,6 +1622,16 @@ NEVER: recite personality, use game language, assume without asking.`;
 async function send(){
   const ta=document.getElementById('cta');const txt=ta.value.trim();if(!txt)return;
   ta.value='';ta.style.height='42px';
+  
+  // Export command: user can type "export pdf" / "make a pdf" / "compile pdf" to download real files
+  if(/^(export|make|create|generate|compile|download|give me|save).{0,20}(pdf|word|excel|spreadsheet|powerpoint|ppt|markdown|md|text|docx|report|document)/i.test(txt)||/^export\s+(pdf|word|excel|pptx|ppt|md|txt|text|docx)$/i.test(txt)){
+    const fmt=/word|docx/.test(txt)?'docx':/excel|spreadsheet/.test(txt)?'xlsx':/powerpoint|ppt/.test(txt)?'pptx':/markdown|\bmd\b/.test(txt)?'md':/text|txt/.test(txt)?'txt':'pdf';
+    addMsg('user',txt);CH.push({role:'user',content:txt});
+    addMsg('agent',`Generating your ${fmt.toUpperCase()} now — it will download automatically. 📄`);
+    await exportAs(fmt);
+    return;
+  }
+  
   addMsg('user',txt);CH.push({role:'user',content:txt});showTyping();
   
   // Check for research request
