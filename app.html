@@ -576,7 +576,7 @@ let S={filter:'all',picked:null,nm:'',imgs:{},docs:[],tasks:[],cat:'sch',bundle:
 let confirmCb=null;
 let AI_MODE='demo';
 let GROQ_KEY='';
-let AI_MODEL='llama-3.3-70b-versatile';
+let AI_MODEL='meta-llama/llama-4-scout-17b-16e-instruct';
 let EMAIL_CFG={publicKey:'',serviceId:'',templateId:'',fromEmail:''};
 let LAST_CHAT_CONTEXT='';
 
@@ -1046,10 +1046,12 @@ function loadSettings(){
 async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
   if(AI_MODE!=='gemma'||!GROQ_KEY)throw new Error('AI_MODE_NOT_SET');
   const sysPrompt=systemPrompt+(docCtx?docCtx:'');
+  // Trim history to the last 10 messages to stay within Groq free-tier TPM limits
+  const trimmed=messages.slice(-10);
   // Attach an image as a multimodal (vision) block if provided
-  let userMessages=messages;
+  let userMessages=trimmed;
   if(imageDataUrl){
-    userMessages=messages.map(m=>{
+    userMessages=trimmed.map(m=>{
       if(m.role!=='user'||typeof m.content!=='string')return m;
       return {role:'user',content:[
         {type:'text',text:m.content},
@@ -1066,7 +1068,7 @@ async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
     if(res.status===401)throw new Error('Invalid Groq API key. Check Settings.');
-    if(res.status===429)throw new Error('Rate limit reached. Wait a moment.');
+    if(res.status===429)throw new Error('Rate limit reached (too many tokens this minute). Wait ~30s and resend — I also trimmed the chat history to help.');
     throw new Error(err.error?.message||`API error: ${res.status}`);
   }
   const data=await res.json();
@@ -1242,8 +1244,10 @@ function uploadDoc(inp){
 }
 function docsContext(){
   if(!S.docs.length)return '';
-  return '\n\n=== USER UPLOADED DOCUMENTS (reference these when relevant) ===\n'+
-    S.docs.map(d=>'['+d.name+']\n'+d.text).join('\n\n');
+  const body=S.docs.map(d=>'['+d.name+']\n'+d.text).join('\n\n');
+  // Cap total injected context to ~4000 chars to respect Groq free-tier TPM limits
+  const capped=body.length>4000?body.slice(0,4000)+'\n…[document truncated to fit token limit]':'body';
+  return '\n\n=== USER UPLOADED DOCUMENTS (reference these when relevant) ===\n'+capped;
 }
 
 /* ══ BUILD ══ */
