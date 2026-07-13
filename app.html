@@ -195,16 +195,17 @@ textarea{resize:none;}
     <div style="flex:1;overflow-y:auto;padding:22px;">
       <div class="label" style="margin-bottom:10px;">🤖 AI Model</div>
       <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:12px;font-weight:400;color:var(--grn);margin-bottom:6px;">✨ Free: Gemma 2 via Groq</div>
+        <div style="font-size:12px;font-weight:400;color:var(--grn);margin-bottom:6px;">✨ Free: Llama 4 Scout — sees images (vision) via Groq</div>
         <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;">Get your free key at <a href="https://console.groq.com" target="_blank" style="color:var(--grn);text-decoration:underline;">console.groq.com</a></div>
       </div>
       <div class="label" style="margin-bottom:8px;">Groq API Key</div>
       <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:12px;">
       <div class="label" style="margin-bottom:8px;">Model</div>
       <select id="model-select" style="margin-bottom:18px;">
+        <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision • Free)</option>
         <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Powerful, Free)</option>
         <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest, Free)</option>
-        <option value="mixtral-8x7b-32768">Mixtral 8x7B (Balanced, Free)</option>
+        <option value="qwen/qwen3-32b">Qwen3 32B (Strong, Free)</option>
       </select>
       <button class="btn btn-w w100" onclick="saveSettings()" style="margin-bottom:22px;">Save AI Settings</button>
 
@@ -1015,9 +1016,20 @@ function loadSettings(){
 }
 
 /* ══ AI CALL ══ */
-async function callAI(messages,systemPrompt){
+async function callAI(messages,systemPrompt,imageDataUrl){
   if(AI_MODE!=='gemma'||!GROQ_KEY)throw new Error('AI_MODE_NOT_SET');
-  const fullMessages=[{role:'system',content:systemPrompt},...messages];
+  // Attach an image as a multimodal (vision) block if provided
+  let userMessages=messages;
+  if(imageDataUrl){
+    userMessages=messages.map(m=>{
+      if(m.role!=='user'||typeof m.content!=='string')return m;
+      return {role:'user',content:[
+        {type:'text',text:m.content},
+        {type:'image_url',image_url:{url:imageDataUrl}}
+      ]};
+    });
+  }
+  const fullMessages=[{role:'system',content:systemPrompt},...userMessages];
   const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY}`},
@@ -1563,8 +1575,9 @@ async function send(){
   const isResearch=/\b(research|look up|find info|search for|tell me about)\b/i.test(txt);
   
   let response;
+  const imgForVision=S.imgs&&CA?S.imgs[CA.id]:null;
   if(AI_MODE==='gemma'){
-    try{response=await callAI(CH,buildPrompt());}
+    try{response=await callAI(CH,buildPrompt(),imgForVision);}
     catch(e){hideTyping();addMsg('agent',`⚠️ ${e.message}\n\nYou can update your API key by clicking the badge in the top-right corner.`);return;}
   }else{
     await new Promise(r=>setTimeout(r,900));
