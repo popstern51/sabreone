@@ -486,6 +486,10 @@ textarea{resize:none;}
             <button onclick="exportAs('txt')">📃 Plain Text</button>
           </div>
         </div>
+        <button class="btn btn-o btn-sm" onclick="document.getElementById('doc-upload').click()" style="padding:11px 11px;flex-shrink:0;" title="Upload a document for the agent to read">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <input type="file" id="doc-upload" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" style="display:none" onchange="uploadDoc(this)">
         <button class="btn btn-o btn-sm" onclick="openEmailComposer()" style="padding:11px 11px;flex-shrink:0;" title="Compose email">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
         </button>
@@ -568,7 +572,7 @@ const SAMPLE_ACTS=['Booked appointment with {c}','Sent follow-up to {c}','Drafte
 const CONTACTS=['Sarah Chen','Michael Torres','Alex Kim','Jordan Lee','Emma Wilson','David Park'];
 const TOPICS=['Market Expansion','Q3 Pipeline','Content Calendar','Competitive Analysis'];
 
-let S={filter:'all',picked:null,nm:'',imgs:{},tasks:[],cat:'sch',bundle:null,agents:[],sel:null,xp:0,sd:0,achv:[],dTab:'agents',paused:new Set(),srch:'',customTasks:[]};
+let S={filter:'all',picked:null,nm:'',imgs:{},docs:[],tasks:[],cat:'sch',bundle:null,agents:[],sel:null,xp:0,sd:0,achv:[],dTab:'agents',paused:new Set(),srch:'',customTasks:[]};
 let confirmCb=null;
 let AI_MODE='demo';
 let GROQ_KEY='';
@@ -897,16 +901,40 @@ function downloadText(text,filename){
 
 /* ══ WEB RESEARCH ══ */
 async function researchWeb(query){
-  // Use Wikipedia API (free, no key, CORS-enabled)
+  // Real web search via DuckDuckGo HTML, fetched through the allorigins CORS proxy
+  // (static GitHub Pages can't call arbitrary sites directly due to CORS; the proxy solves that).
+  try{
+    const ddg=`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const proxy=`https://api.allorigins.win/raw?url=${encodeURIComponent(ddg)}`;
+    const res=await fetch(proxy);
+    if(res.ok){
+      const html=await res.text();
+      const results=[];
+      // DuckDuckGo HTML result links live in <a class="result__a" href="...">title</a> and snippets in .result__snippet
+      const linkRe=/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+      const snipRe=/<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+      const titles=[...html.matchAll(linkRe)].slice(0,5);
+      const snips=[...html.matchAll(snipRe)].slice(0,5);
+      for(let i=0;i<titles.length;i++){
+        const raw=titles[i][2].replace(/<[^>]*>/g,'').trim();
+        const snip=snips[i]?snips[i][1].replace(/<[^>]*>/g,'').trim():'';
+        let url=titles[i][1];
+        // DDG wraps external links in a redirect; extract the real uddg= param if present
+        const m=url.match(/[?&]uddg=([^&]+)/);
+        if(m)url=decodeURIComponent(m[1]);
+        if(raw)results.push({title:raw,extract:snip,url});
+      }
+      if(results.length)return{success:true,results,source:'web'};
+    }
+  }catch(e){/* fall through to Wikipedia */}
+  // Fallback: Wikipedia (free, no key, CORS-enabled)
   try{
     const searchUrl=`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=3`;
     const searchRes=await fetch(searchUrl);
     const searchData=await searchRes.json();
-    
     if(!searchData.query||!searchData.query.search||searchData.query.search.length===0){
       return{success:false,error:'No results found'};
     }
-    
     const results=[];
     for(const item of searchData.query.search.slice(0,3)){
       try{
@@ -923,8 +951,7 @@ async function researchWeb(query){
         results.push({title:item.title,extract:item.snippet.replace(/<[^>]*>/g,''),url:`https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`});
       }
     }
-    
-    return{success:true,results};
+    return{success:true,results,source:'wikipedia'};
   }catch(e){
     return{success:false,error:e.message};
   }
@@ -1016,8 +1043,9 @@ function loadSettings(){
 }
 
 /* ══ AI CALL ══ */
-async function callAI(messages,systemPrompt,imageDataUrl){
+async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
   if(AI_MODE!=='gemma'||!GROQ_KEY)throw new Error('AI_MODE_NOT_SET');
+  const sysPrompt=systemPrompt+(docCtx?docCtx:'');
   // Attach an image as a multimodal (vision) block if provided
   let userMessages=messages;
   if(imageDataUrl){
@@ -1029,7 +1057,7 @@ async function callAI(messages,systemPrompt,imageDataUrl){
       ]};
     });
   }
-  const fullMessages=[{role:'system',content:systemPrompt},...userMessages];
+  const fullMessages=[{role:'system',content:sysPrompt},...userMessages];
   const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY}`},
@@ -1192,6 +1220,31 @@ function rGrid(){
 }
 function pickAg(id){S.picked=AGENTS.find(a=>a.id===id);rGrid();}
 function upImg(id,inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{S.imgs[id]=e.target.result;if(S.picked?.id===id)rBuild();rGrid();};r.readAsDataURL(f);}
+
+// ── Document upload: read file text client-side, attach as agent context ──
+function uploadDoc(inp){
+  const f=inp.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let text=String(e.target.result||'');
+    // crude PDF text extraction (strips to readable strings)
+    if(f.name.toLowerCase().endsWith('.pdf')){
+      const m=text.match(/[A-Za-z0-9 ,.;:!?()'"\-]{4,}/g);
+      text=m?m.join(' '):'';
+    }
+    const cap=text.slice(0,12000);
+    S.docs.push({name:f.name,text:cap});
+    toast('📎 '+f.name+' added — the agent can now read it');
+    if(S.picked?.id===CA?.id)rBuild();
+  };
+  if(f.name.toLowerCase().endsWith('.pdf'))reader.readAsBinaryString(f);
+  else reader.readAsText(f);
+}
+function docsContext(){
+  if(!S.docs.length)return '';
+  return '\n\n=== USER UPLOADED DOCUMENTS (reference these when relevant) ===\n'+
+    S.docs.map(d=>'['+d.name+']\n'+d.text).join('\n\n');
+}
 
 /* ══ BUILD ══ */
 function rBuild(){
@@ -1576,12 +1629,14 @@ async function send(){
   
   let response;
   const imgForVision=S.imgs&&CA?S.imgs[CA.id]:null;
+  const docCtx=docsContext();
   if(AI_MODE==='gemma'){
-    try{response=await callAI(CH,buildPrompt(),imgForVision);}
+    try{response=await callAI(CH,buildPrompt(),imgForVision,docCtx);}
     catch(e){hideTyping();addMsg('agent',`⚠️ ${e.message}\n\nYou can update your API key by clicking the badge in the top-right corner.`);return;}
   }else{
     await new Promise(r=>setTimeout(r,900));
     response=demoAI(txt,CA);
+    if(S.docs.length)addMsg('agent',`📎 I have ${S.docs.length} document(s) loaded (${S.docs.map(d=>d.name).join(', ')}). In demo mode I can't read them yet — switch to your Groq key (Settings) so I can answer from the file contents.`);
   }
   
   hideTyping();
@@ -1596,8 +1651,8 @@ async function send(){
   // Honest activity log: only real user-initiated interactions are recorded
   if(CA){CA.activities.unshift({text:`Chat: ${txt.slice(0,60)}${txt.length>60?'…':''}`,ts:Date.now(),catId:CA.tasks[0]?.catId,agentId:CA.id,agentName:CA.name});CA.activities=CA.activities.slice(0,20);}
   
-  // If research was requested in demo mode, trigger actual research
-  if(isResearch&&AI_MODE==='demo'){
+  // Live web research — works in both demo and real Groq mode
+  if(isResearch){
     const query=txt.replace(/^(research|look up|find info( about)?|search for|tell me about)\s*/i,'').trim();
     if(query.length>3){
       setTimeout(async()=>{
@@ -1605,6 +1660,8 @@ async function send(){
         if(result.success){
           renderResearchResults(result.results,query);
           addMsg('agent',`I found ${result.results.length} sources on "${query}". Would you like me to compile this into a PDF report?`);
+        }else{
+          addMsg('agent',`I couldn't find live web results for "${query}" right now. You can still ask me directly.`);
         }
       },500);
     }
