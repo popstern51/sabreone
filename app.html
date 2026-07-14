@@ -143,6 +143,7 @@ textarea{resize:none;}
 .mode-badge{position:fixed;top:16px;right:16px;padding:6px 14px;border-radius:99px;font-size:11px;font-weight:400;letter-spacing:.5px;z-index:999;backdrop-filter:blur(10px);cursor:pointer;transition:all .2s;}
 .mode-badge.gemma{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35);color:var(--grn);}
 .mode-badge.demo{background:rgba(224,185,79,.15);border:1px solid rgba(224,185,79,.35);color:var(--gold);}
+.mode-badge.pro{background:rgba(168,85,247,.18);border:1px solid rgba(168,85,247,.45);color:#c4a3ff;}
 .mode-badge:hover{transform:translateY(-1px);}
 .email-status{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:400;padding:3px 10px;border-radius:99px;margin-left:8px;}
 .email-status.on{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35);color:var(--grn);}
@@ -214,8 +215,10 @@ textarea{resize:none;}
       <div class="label" style="margin-bottom:10px;">⭐ Upgrade</div>
       <div style="background:rgba(224,185,79,.08);border:1px solid rgba(224,185,79,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div style="font-size:13px;font-weight:400;color:var(--gold);margin-bottom:6px;">SabreOne™ Pro — $19/mo</div>
-        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM, email outreach, voice. Offered by a NJ sole proprietor.</div>
-        <button class="btn btn-w w100" onclick="openPayApp('pro','Pro')">Upgrade to Pro →</button>
+        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM (your local Qwen brain), persistent memory, email outreach, voice. Offered by a NJ sole proprietor.</div>
+        <div id="pro-status" style="font-size:11px;font-weight:400;margin-bottom:10px;color:var(--grn);"></div>
+        <button class="btn btn-w w100" id="pro-btn" onclick="openPayApp('pro','Pro')">Upgrade to Pro →</button>
+        <button class="btn btn-ghost w100" id="pro-activate-btn" style="display:none;margin-top:8px;" onclick="activatePro()">✓ I've paid — Activate Pro</button>
       </div>
       
       <div class="divider"></div>
@@ -577,6 +580,7 @@ let confirmCb=null;
 let AI_MODE='demo';
 let GROQ_KEY='';
 let AI_MODEL='meta-llama/llama-4-scout-17b-16e-instruct';
+let PLAN='free'; // 'free' | 'pro' — Pro routes to local backend (Qwen/PostgREST)
 let EMAIL_CFG={publicKey:'',serviceId:'',templateId:'',fromEmail:''};
 let LAST_CHAT_CONTEXT='';
 
@@ -1020,6 +1024,11 @@ function useDemoMode(){
 
 function updateModeBadge(){
   const badge=document.getElementById('mode-badge');
+  if(PLAN==='pro'){
+    badge.className='mode-badge pro';
+    badge.innerHTML='⚡ Pro · Local Qwen';
+    return;
+  }
   if(AI_MODE==='gemma'){
     badge.className='mode-badge gemma';
     const modelName=AI_MODEL.includes('gemma')?'Gemma':AI_MODEL.includes('llama')?'Llama':'Mixtral';
@@ -1027,6 +1036,25 @@ function updateModeBadge(){
   }else{
     badge.className='mode-badge demo';
     badge.innerHTML='🎭 Demo Mode';
+  }
+  refreshProUI();
+}
+// Keep the Settings → Pro panel in sync with PLAN state.
+function refreshProUI(){
+  const status=document.getElementById('pro-status');
+  const btn=document.getElementById('pro-btn');
+  const act=document.getElementById('pro-activate-btn');
+  if(!status)return;
+  if(PLAN==='pro'){
+    status.textContent='✓ Pro active — routing to your local Qwen brain.';
+    status.style.color='var(--grn)';
+    if(btn)btn.style.display='none';
+    if(act)act.style.display='none';
+  }else{
+    status.textContent='Free mode — Groq (key required).';
+    status.style.color='var(--t2)';
+    if(btn)btn.style.display='';
+    if(act)act.style.display='none';
   }
 }
 
@@ -1043,12 +1071,16 @@ function loadSettings(){
   }
   else{AI_MODE='demo';}
   if(emailCfg){try{EMAIL_CFG=JSON.parse(emailCfg);initEmailJS();}catch(e){}}
+  const plan=localStorage.getItem('plan');
+  if(plan==='pro'){PLAN='pro';}
   updateModeBadge();
   updateEmailStatus();
 }
 
 /* ══ AI CALL ══ */
 async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
+  // ── PRO MODE: route to local backend (LM Studio Qwen + PostgREST) ──
+  if(PLAN==='pro'){ return await callAIPro(messages,systemPrompt,imageDataUrl,docCtx); }
   if(AI_MODE!=='gemma'||!GROQ_KEY)throw new Error('AI_MODE_NOT_SET');
   const sysPrompt=systemPrompt+(docCtx?docCtx:'');
   // Trim history to the last 10 messages to stay within Groq free-tier TPM limits
@@ -1078,6 +1110,54 @@ async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
   }
   const data=await res.json();
   return data.choices[0].message.content;
+}
+
+/* ══ PRO MODE AI CALL (local backend: LM Studio Qwen + PostgREST) ══ */
+async function callAIPro(messages,systemPrompt,imageDataUrl,docCtx){
+  const sysPrompt=systemPrompt+(docCtx?docCtx:'');
+  // Pro has no TPM cap — send fuller history, but still bound to keep latency sane.
+  const trimmed=messages.slice(-25);
+  let userMessages=trimmed;
+  if(imageDataUrl){
+    userMessages=trimmed.map(m=>{
+      if(m.role!=='user'||typeof m.content!=='string')return m;
+      return {role:'user',content:[
+        {type:'text',text:m.content},
+        {type:'image_url',image_url:{url:imageDataUrl}}
+      ]};
+    });
+  }
+  const fullMessages=[{role:'system',content:sysPrompt},...userMessages];
+  let res;
+  try{
+    res=await fetch(PRO_BACKEND,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'qwen/qwen3.5-9b',messages:fullMessages,temperature:0.7,max_tokens:1500})
+    });
+  }catch(e){
+    throw new Error('Pro backend unreachable at '+PRO_BACKEND+'. Is LM Studio running on :1234? Start it, then retry.');
+  }
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err.error?.message||`Pro API error: ${res.status}`);
+  }
+  const data=await res.json();
+  const reply=data.choices[0].message.content;
+  // Persist to local Supabase-shaped history (best-effort; never block the reply).
+  persistChat('pro',fullMessages.concat([{role:'assistant',content:reply}])).catch(()=>{});
+  return reply;
+}
+
+// Best-effort save of a conversation turn to PostgREST (Supabase-shaped).
+async function persistChat(agent,msgs){
+  try{
+    await fetch(PRO_DB,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({agent:agent,messages:msgs})
+    });
+  }catch(e){ /* offline / not running — ignore */ }
 }
 
 /* ══ DEMO AI ══ */
@@ -1780,10 +1860,17 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   function payNowApp(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' in config.js.'); return; }
+    // Local gate: we can't verify payment server-side yet (no webhook).
+    // Confirm with the user, then activate Pro locally and persist it.
+    const ok = confirm('You\'ll be taken to checkout. After paying, Pro mode activates on THIS device.\n\nContinue to Stripe?');
+    if(!ok) return;
+    if(tier==='pro'){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); }
     // Navigate in the same tab so the user clearly lands on the correct checkout
     window.location.href = link;
   }
   function openPayApp(tier,label){ payNowApp(tier); }
+  // Called when returning from checkout (or manually) to ensure Pro state sticks.
+  function activatePro(){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); toast('✨ Pro mode active — routing to your local Qwen brain.'); }
 </script>
 </body>
 </html>
