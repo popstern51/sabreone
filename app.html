@@ -1035,7 +1035,12 @@ function loadSettings(){
   const key=localStorage.getItem('groq_key');
   const model=localStorage.getItem('ai_model');
   const emailCfg=localStorage.getItem('email_cfg');
-  if(mode==='gemma'&&key){AI_MODE='gemma';GROQ_KEY=key;AI_MODEL=model||'llama-3.3-70b-versatile';}
+  if(mode==='gemma'&&key){AI_MODE='gemma';GROQ_KEY=key;
+    // Enforce Llama 4 Scout (vision + healthy free tier) as the default for all users,
+    // including returning ones whose saved model may be the retired llama-3.3-70b-versatile.
+    AI_MODEL=(model&&model!=='llama-3.3-70b-versatile')?model:'meta-llama/llama-4-scout-17b-16e-instruct';
+    localStorage.setItem('ai_model',AI_MODEL);
+  }
   else{AI_MODE='demo';}
   if(emailCfg){try{EMAIL_CFG=JSON.parse(emailCfg);initEmailJS();}catch(e){}}
   updateModeBadge();
