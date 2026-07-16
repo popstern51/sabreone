@@ -1210,6 +1210,11 @@ function demoAI(userMsg,agent){
     }
   }
   
+  if(msg.match(/^(hi|hey|hello|help|what can you do|who are you|hey |hi )/)){
+    const nm=agent?.name||'your assistant';
+    return `Hey! I'm ${nm}. I can dig up live web research, draft and send emails or texts, and turn anything into a clean PDF, Word, or spreadsheet. Tell me what you're working on and I'll take it from there.`;
+  }
+  
   if(msg.includes('spreadsheet')||msg.includes('report')||msg.includes('tracker')||msg.includes('data')){
     const sheetData={title:'Weekly Activity Report',headers:['Date','Task','Status','Notes'],rows:[[new Date().toLocaleDateString(),'Email follow-ups','Completed','Sent 12 messages'],[new Date(Date.now()-86400000).toLocaleDateString(),'Meeting prep','In progress','Q3 review materials'],[new Date(Date.now()-172800000).toLocaleDateString(),'Lead research','Completed','Added 8 prospects'],[new Date(Date.now()-259200000).toLocaleDateString(),'Content draft','Pending','Blog post outline'],[new Date(Date.now()-345600000).toLocaleDateString(),'Calendar review','Completed','Blocked focus time'],[new Date(Date.now()-432000000).toLocaleDateString(),'Proposal review','In progress','Client feedback pending']]};
     return`Here's your weekly activity report.\n\nSPREADSHEET_DATA:${JSON.stringify(sheetData)}\n\n💡 I can export this as a real file — type "export pdf" or click the 📄 icon in the chat footer (PDF, Word, Excel, or PowerPoint).`;
@@ -1219,19 +1224,22 @@ function demoAI(userMsg,agent){
     else return`To send real emails, set up EmailJS in Settings. It's free and takes 5 minutes.`;
   }
   if(msg.includes('status')||msg.includes('update')||msg.includes('progress')){
-    return`Here's your current status across all ${agent.tasks.length} tasks:\n\n• ${Math.floor(agent.tasks.length*0.4)} completed this week\n• ${Math.floor(agent.tasks.length*0.35)} in progress\n• ${agent.tasks.length-Math.floor(agent.tasks.length*0.4)-Math.floor(agent.tasks.length*0.35)} pending\n\nWhat would you like to focus on next?`;
+    const done=Math.floor(agent.tasks.length*0.4), doing=Math.floor(agent.tasks.length*0.35), pend=agent.tasks.length-done-doing;
+    return `Here's where things stand on your ${agent.tasks.length} active tasks:\n\n• ${done} wrapped up this week\n• ${doing} moving right now\n• ${pend} still queued\n\nWant me to write this up as a clean status update you can forward to a client or your boss?`;
   }
   if(msg.includes('priority')||msg.includes('focus')){
-    return`Your top priority right now is ${agent.tasks[0]?.label||'email follow-ups'}.\n\nThis affects ${Math.floor(Math.random()*5)+3} active opportunities. I recommend blocking 90 minutes this afternoon.\n\nWhat's preventing you from starting now?`;
+    const top=agent.tasks[0]?.label||'your email follow-ups';
+    return `If I had to flag one thing, it's ${top} — that's the one with the most moving parts and the tightest deadline. I'd carve out a solid 90-minute block for it this afternoon while you're fresh.\n\nWhat usually gets in the way when you sit down to start it?`;
   }
   if(msg.includes('next')||msg.includes('today')||msg.includes('plan')){
-    return`Your next steps for today:\n\n1. Complete ${agent.tasks[0]?.label||'morning briefing'} (30 min)\n2. Review ${Math.floor(Math.random()*8)+5} priority emails (45 min)\n3. Prepare materials for tomorrow's meeting (60 min)\n4. Follow up with ${CONTACTS[Math.floor(Math.random()*CONTACTS.length)]} (20 min)\n\nWhen would you like to tackle the first item?`;
+    const c1=agent.tasks[0]?.label||'your morning briefing', c2=CONTACTS[Math.floor(Math.random()*CONTACTS.length)];
+    return `Here's how I'd run today:\n\n1. Knock out ${c1} — about 30 min\n2. Clear the priority email pile — roughly 45 min\n3. Prep for tomorrow's meeting — 60 min\n4. Quick check-in with ${c2} — 20 min\n\nWant me to draft any of those follow-ups for you right now?`;
   }
-  return`Happy to help. I'm keeping an eye on your ${agent.tasks.length} active tasks. What would you like to work on — a quick status check, drafting an email, or researching something?`;
+  return `Got it. I've got your ${agent.tasks.length} tasks in view and nothing's slipping. What do you want to push forward — a written status update, an email, or some research?`;
 }
 
 function demoBrief(agent){
-  return`**Accomplished Today:**\nCompleted morning briefing and prioritized 8 incoming emails. Flagged 3 high-priority messages.\n\n**Needs Attention:**\nTwo proposals require follow-up — one from ${CONTACTS[0]} (due tomorrow) and another from ${CONTACTS[1]}.\n\n**Rest-of-Day Priorities:**\n1. Draft responses to flagged emails (45 min)\n2. Prepare Q3 review materials (60 min)\n3. Follow up with ${CONTACTS[2]} (20 min)\n\n**Risks:**\nTight deadline on Thursday deliverable. Recommend starting preparation today.`;
+  return`**Done today:**\nGot the morning briefing out and sorted 8 incoming emails — flagged 3 that need your eyes.\n\n**Needs attention:**\nTwo proposals are waiting on you — one from ${CONTACTS[0]} (due tomorrow) and another from ${CONTACTS[1]}.\n\n**Rest of the day:**\n1. Draft replies to the flagged emails (45 min)\n2. Pull together the Q3 review materials (60 min)\n3. Touch base with ${CONTACTS[2]} (20 min)\n\n**One risk:**\nThursday's deliverable is tight — I'd start the prep today so it's not a scramble.`;
 }
 
 /* ══ STORAGE ══ */
@@ -1730,13 +1738,16 @@ function qs(q){document.getElementById('cta').value=q;send();}
 
 function buildPrompt(){
   const ag=CA.ag;
-  return`You are ${CA.name}, a professional AI assistant. Role: ${ag.title}. Specialty: ${ag.spec}. Communication style: ${ag.chatStyle}. Focus questions on: ${ag.qFocus}.
+  const emailNote=isEmailConfigured()
+    ? 'EMAIL: Email is connected. When Joseph wants to send or draft an email, offer to help and point him to the ✉️ composer.'
+    : 'EMAIL: Email is not set up yet — just say so if he asks.';
+  return`You are ${CA.name}, a sharp, dependable AI assistant on Joseph's team. Role: ${ag.title}. Specialty: ${ag.spec}. Style: ${ag.chatStyle}. You keep Joseph focused on: ${ag.qFocus}.
 Active tasks (${CA.tasks.length}): ${CA.tasks.map(t=>'• '+t.label).join('\n')}
-${isEmailConfigured()?`EMAIL: The user has email configured. When asked to send/draft emails, offer to help compose and remind them to use the email composer (✉️ icon).`:'EMAIL: Email is not configured yet.'}
-CAPABILITIES: You CAN produce real downloadable files — PDF, Word, Excel, PowerPoint, Markdown, or Text — using the 📄 export menu in the chat footer (or by telling the user to type "export pdf"). Never say you cannot generate or display files; you can. When the user asks for a report, PDF, document, or export, tell them you'll generate it and instruct them to click 📄 or type "export pdf". You can also research any topic (user can say "research" or "look up" anything).
-RULES: Professional, direct, business-focused tone. 3–5 sentences per response. Reference actual assigned tasks. Be specific. ALWAYS end with ONE precise follow-up question.
-SPREADSHEET: When asked for any report, output: SPREADSHEET_DATA: {"title":"Title","headers":["Col 1","Col 2","Col 3","Col 4"],"rows":[["val","val","val","val"]]} with 6–8 realistic rows. End with a follow-up question.
-NEVER: recite personality, use game language, assume without asking.`;
+${emailNote}
+WHAT YOU CAN DO: Research any topic live (say "research" + a subject), produce real downloadable files — PDF, Word, Excel, PowerPoint, Markdown, Text — via the 📄 menu (never say you can't make files), and draft or send emails and texts.
+HOW TO SOUND: Like a competent human colleague, not a bot. Natural, warm, concise (3–5 sentences). Reference his actual tasks. Be specific and useful. End every reply with one clear next step or question.
+SPREADSHEET: For any report, output: SPREADSHEET_DATA: {"title":"Title","headers":["Col 1","Col 2","Col 3","Col 4"],"rows":[["val","val","val","val"]]} with 6–8 realistic rows, then a follow-up question.
+NEVER: announce that you're an AI, recite your personality, use gaming/sci-fi language, or act without checking first.`;
 }
 
 async function send(){
