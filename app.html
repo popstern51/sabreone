@@ -268,8 +268,13 @@ textarea{resize:none;}
       <div class="label" style="margin-bottom:8px;">Message</div>
       <textarea id="em-body" rows="8" placeholder="Write your message..." style="min-height:180px;line-height:1.6;"></textarea>
       <div id="em-error" style="display:none;margin-top:12px;padding:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;font-size:12px;color:#f87171;"></div>
-      <div style="display:flex;gap:8px;margin-top:18px;">
-        <button class="btn btn-w w100" onclick="sendComposedEmail()" id="send-email-btn">Send Email</button>
+      <div style="margin-top:14px;">
+        <div class="label" style="margin-bottom:8px;">📱 Or send as text message (SMS via n8n)</div>
+        <input type="text" id="em-phone" placeholder="Phone number, e.g. 7325551234" style="margin-bottom:10px;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-o w100" onclick="sendAsText()" id="send-text-btn">Send Text</button>
+          <button class="btn btn-w w100" onclick="sendComposedEmail()" id="send-email-btn">Send Email</button>
+        </div>
       </div>
     </div>
   </div>
@@ -670,6 +675,30 @@ async function sendComposedEmail(){
     }
   }catch(e){errEl.style.display='block';errEl.textContent=e.message;}
   finally{btn.disabled=false;btn.textContent='Send Email';}
+}
+
+// Send the composer message as an SMS via the live n8n /webhook/sms-send workflow.
+async function sendAsText(){
+  const phone=document.getElementById('em-phone').value.trim().replace(/[^0-9]/g,'');
+  const msg=document.getElementById('em-body').value.trim();
+  const btn=document.getElementById('send-text-btn');
+  const errEl=document.getElementById('em-error');
+  if(phone.length<10){errEl.style.display='block';errEl.textContent='Enter a valid phone number (at least 10 digits).';return;}
+  if(!msg){errEl.style.display='block';errEl.textContent='Write a message first.';return;}
+  errEl.style.display='none';btn.disabled=true;btn.textContent='Sending…';
+  try{
+    const r=await fetch('http://localhost:5678/webhook/sms-send',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({phone:phone,message:msg})
+    });
+    const txt=await r.text();
+    document.getElementById('email-modal').style.display='none';
+    toast(`✓ Text sent to ${phone}`);
+    if(CA){addMsg('agent',`✓ Text message sent to ${phone}. Want me to follow up by email too?`);
+      CA.activities.unshift({text:`Sent SMS to ${phone}`,ts:Date.now(),catId:'eml',agentId:CA.id,agentName:CA.name});}
+  }catch(e){
+    errEl.style.display='block';errEl.textContent='SMS failed: '+e.message+' (is n8n running on :5678?)';
+  }finally{btn.disabled=false;btn.textContent='Send Text';}
 }
 
 /* ══ DOCUMENT GENERATION ══ */
@@ -1198,7 +1227,7 @@ function demoAI(userMsg,agent){
   if(msg.includes('next')||msg.includes('today')||msg.includes('plan')){
     return`Your next steps for today:\n\n1. Complete ${agent.tasks[0]?.label||'morning briefing'} (30 min)\n2. Review ${Math.floor(Math.random()*8)+5} priority emails (45 min)\n3. Prepare materials for tomorrow's meeting (60 min)\n4. Follow up with ${CONTACTS[Math.floor(Math.random()*CONTACTS.length)]} (20 min)\n\nWhen would you like to tackle the first item?`;
   }
-  return`I'm tracking ${agent.tasks.length} active tasks. Everything is on schedule. What specific area would you like me to dive into?`;
+  return`Happy to help. I'm keeping an eye on your ${agent.tasks.length} active tasks. What would you like to work on — a quick status check, drafting an email, or researching something?`;
 }
 
 function demoBrief(agent){
@@ -1682,7 +1711,9 @@ function openChat(agentId){
   document.getElementById('cmodal').style.display='flex';
   document.getElementById('cta').focus();
   const ts=CA.tasks.slice(0,2).map(t=>t.label).join(' and ');
-  addMsg('agent',`Hello. I'm ${CA.name}, your ${ag.spec} assistant.\n\nI currently have ${CA.tasks.length} tasks assigned, including ${ts}${CA.tasks.length>2?' and others':''}.\n\n💡 New: I can now research the web, send emails, and export documents (PDF, Word, Excel, PowerPoint).\n\n${isEmailConfigured()?'✉️ Email is connected — just ask.\n\n':'Click the ✉️ icon to compose an email.\n\n'}What would you like to work on today?`);
+  addMsg('agent',`Hi, I'm ${CA.name} — your ${ag.spec} assistant. I've got ${CA.tasks.length} tasks on my plate${CA.tasks.length?`, including ${ts}`:''}, and I can research the web, send emails, and text on your behalf.
+
+${isEmailConfigured()?'✉️ Email is connected, so just say the word to send something.\n\n':'Add your EmailJS key in Settings to let me send emails.\n\n'}What can I help you with?`);
 }
 function buildChips(ag){
   return[
