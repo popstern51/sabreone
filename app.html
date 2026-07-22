@@ -500,6 +500,7 @@ textarea{resize:none;}
     <div class="chat-body" id="cbody"></div>
     <div class="chip-bar" id="cquick"></div>
     <div class="chat-foot">
+      <div id="img-preview" style="display:none;align-items:center;gap:2px;margin-bottom:8px;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;"></div>
       <div class="chat-row">
         <textarea class="cta" id="cta" placeholder="Ask your agent anything…" rows="1"
           oninput="this.style.height='42px';this.style.height=Math.min(this.scrollHeight,100)+'px';"
@@ -1411,7 +1412,42 @@ function rGrid(){
   else{nx.disabled=true;hn.textContent='Select an agent to continue';}
 }
 function pickAg(id){S.picked=AGENTS.find(a=>a.id===id);rGrid();}
-function upImg(id,inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{S.imgs[id]=e.target.result;if(S.picked?.id===id)rBuild();rGrid();};r.readAsDataURL(f);}
+function upImg(id,inp){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const dataURL=e.target.result;
+    S.imgs[id]=dataURL;
+    if(S.picked?.id===id)rBuild();
+    rGrid();
+    showImgPreview(dataURL,f.name);
+    // Make the agent "see" the image even on text-only models: OCR → inject as context.
+    if(window.Tesseract){
+      toast('👁 Reading image…');
+      Tesseract.recognize(f,'eng').then(({data:{text}})=>{
+        const ocr=(text||'').trim();
+        S.docs.push({name:'[image] '+f.name, text: ocr? ('[Text detected in image]\n'+ocr.slice(0,8000)) : '[Image uploaded — no text detected by OCR]'});
+        toast('📎 '+f.name+' added — the agent can now read it');
+        if(S.picked?.id===CA?.id)rBuild();
+      }).catch(()=>{
+        S.docs.push({name:'[image] '+f.name, text:'[Image uploaded]'});
+        toast('📎 '+f.name+' added (could not OCR)');
+      });
+    }else{
+      S.docs.push({name:'[image] '+f.name, text:'[Image uploaded]'});
+      toast('📎 '+f.name+' added');
+    }
+  };
+  r.readAsDataURL(f);
+}
+// Show the attached image thumbnail in the chat composer
+function showImgPreview(src,name){
+  const box=document.getElementById('img-preview');
+  if(!box)return;
+  box.style.display='flex';
+  box.innerHTML=`<img src="${src}" style="height:46px;border-radius:8px;object-fit:cover;"><button onclick="clearImgPreview()" style="margin-left:6px;background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:6px;padding:2px 7px;cursor:pointer;font-size:11px;">✕</button><span style="font-size:10px;color:rgba(255,255,255,.5);align-self:center;margin-left:4px;">${name||''}</span>`;
+}
+function clearImgPreview(){ const b=document.getElementById('img-preview'); if(b){b.style.display='none';b.innerHTML='';} }
 
 // ── Document upload: REAL parsing client-side so the agent can read ANY file ──
 // pdf.js worker
@@ -1863,7 +1899,7 @@ NEVER: announce that you're an AI, recite your personality, use gaming/sci-fi la
 
 async function send(){
   const ta=document.getElementById('cta');const txt=ta.value.trim();if(!txt)return;
-  ta.value='';ta.style.height='42px';
+  ta.value='';ta.style.height='42px';clearImgPreview();
   
   // Export command: user can type "export pdf" / "make a pdf" / "compile pdf" to download real files
   if(/^(export|make|create|generate|compile|download|give me|save).{0,20}(pdf|word|excel|spreadsheet|powerpoint|ppt|markdown|md|text|docx|report|document)/i.test(txt)||/^export\s+(pdf|word|excel|pptx|ppt|md|txt|text|docx)$/i.test(txt)){
