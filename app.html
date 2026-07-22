@@ -212,12 +212,30 @@ textarea{resize:none;}
 
       <div class="divider"></div>
 
-      <div class="label" style="margin-bottom:10px;">⭐ Upgrade</div>
+      <div class="label" style="margin-bottom:10px;">⭐ Upgrade to Pro — pick your plan</div>
       <div style="background:rgba(224,185,79,.08);border:1px solid rgba(224,185,79,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:400;color:var(--gold);margin-bottom:6px;">SabreOne™ Pro — $19/mo</div>
-        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM via YOUR OWN API key, persistent memory, email outreach, voice. Your key, your cost — we never see your bill. Offered by a NJ sole proprietor.</div>
+        <div style="font-size:13px;font-weight:400;color:var(--gold);margin-bottom:6px;">SabreOne™ Pro — $19/mo &nbsp;•&nbsp; Team — $49/mo</div>
+        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:12px;">
+          <b style="color:var(--t1);">Two ways to use Pro:</b><br>
+          ① <b style="color:var(--grn);">Bring Your Own Key</b> (free) — paste your own free Groq key, you pay your AI provider directly. <b>Joseph pays $0.</b><br>
+          ② <b style="color:var(--blue);">Subscribe</b> ($19/$49) — we run the AI for you, no key needed.
+        </div>
+
+        <div style="font-size:11px;font-weight:500;color:var(--grn);margin-bottom:6px;">① Bring Your Own Key — no cost to you</div>
+        <div style="font-size:10px;font-weight:300;color:var(--t2);line-height:1.5;background:rgba(255,255,255,.04);border-radius:8px;padding:10px;margin-bottom:10px;">
+          <b>Don't be scared — it takes 1 minute, no tech skills:</b><br>
+          1. Go to <a href="https://console.groq.com" target="_blank" style="color:var(--grn);text-decoration:underline;">console.groq.com</a> (free account)<br>
+          2. Click <b>API Keys</b> → <b>Create</b> → copy the key (starts with <code style="background:rgba(255,255,255,.1);padding:1px 4px;border-radius:3px;">gsk_</code>)<br>
+          3. Paste it in the <b>"Groq API Key"</b> box at the top of this Settings tab<br>
+          4. Click <b>Save AI Settings</b> → done. Pro is now active.
+        </div>
+        <button class="btn btn-o w100" id="byok-activate-btn" onclick="activateBYOK()">✓ I pasted my key — Activate Pro (free)</button>
+
+        <div class="divider" style="margin:12px 0;"></div>
+
+        <div style="font-size:11px;font-weight:500;color:var(--blue);margin-bottom:6px;">② Subscribe — we host it ($19/mo)</div>
         <div id="pro-status" style="font-size:11px;font-weight:400;margin-bottom:10px;color:var(--grn);"></div>
-        <button class="btn btn-w w100" id="pro-btn" onclick="openPayApp('pro','Pro')">Upgrade to Pro →</button>
+        <button class="btn btn-w w100" id="pro-btn" onclick="openPayApp('pro','Pro')">Subscribe to Pro →</button>
         <button class="btn btn-ghost w100" id="pro-activate-btn" style="display:none;margin-top:8px;" onclick="activatePro()">✓ I've paid — Activate Pro</button>
       </div>
       
@@ -1055,7 +1073,7 @@ function updateModeBadge(){
   const badge=document.getElementById('mode-badge');
   if(PLAN==='pro'){
     badge.className='mode-badge pro';
-    badge.innerHTML='⚡ Pro · Your Key';
+    badge.innerHTML = (PRO_PATH==='hosted') ? '⚡ Pro · Hosted' : '⚡ Pro · Your Key';
     return;
   }
   if(AI_MODE==='gemma'){
@@ -1142,9 +1160,15 @@ async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
 }
 
 /* ══ PRO MODE AI CALL (local backend: LM Studio Qwen + PostgREST) ══ */
-// Pro = BYOK: the CUSTOMER's own API key bills the CUSTOMER. Joseph pays $0 in tokens.
+// Pro = dual path.
+//  BYOK (default): the CUSTOMER's own API key bills the CUSTOMER. Joseph pays $0.
+//  HOSTED: Joseph's key (JOSEPH_PRO_KEY) is used; customer subscribed via Stripe.
 async function callAIPro(messages,systemPrompt,imageDataUrl,docCtx){
-  if(!GROQ_KEY){ throw new Error('No API key set. Open Settings → paste your Groq (or OpenRouter) key. Pro uses YOUR key, so YOU control the cost — SabreOne never sees your bill.'); }
+  const useHosted = (typeof PRO_PATH!=='undefined' && PRO_PATH==='hosted' && typeof JOSEPH_PRO_KEY!=='undefined' && JOSEPH_PRO_KEY);
+  const key = useHosted ? JOSEPH_PRO_KEY : GROQ_KEY;
+  if(!key){ throw new Error(useHosted
+    ? 'Hosted Pro is temporarily unavailable. Please use Bring-Your-Own-Key (free) in Settings, or contact support.'
+    : 'No API key set. Open Settings → "Bring Your Own Key" and paste your free Groq key (takes 1 minute). Pro uses YOUR key, so YOU control the cost.'); }
   const sysPrompt=systemPrompt+(docCtx?docCtx:'');
   const trimmed=messages.slice(-25); // Pro: fuller history, still bounded for latency
   let userMessages=trimmed;
@@ -1160,17 +1184,18 @@ async function callAIPro(messages,systemPrompt,imageDataUrl,docCtx){
   const fullMessages=[{role:'system',content:sysPrompt},...userMessages];
   const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
     method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY}`},
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
     body:JSON.stringify({model:AI_MODEL,messages:fullMessages,temperature:0.7,max_tokens:1500})
   });
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
-    if(res.status===401)throw new Error('Invalid API key. Check Settings.');
-    if(res.status===429)throw new Error('Your Groq/OpenRouter rate limit hit — that cap is set on YOUR account at console.groq.com. Upgrade there or wait ~30s.');
+    if(res.status===401)throw new Error(useHosted?'Hosted Pro auth error — contact support.':'Invalid API key. Check Settings.');
+    if(res.status===429)throw new Error(useHosted
+      ? 'Hosted Pro rate limit reached — try again shortly, or switch to Bring-Your-Own-Key (free) in Settings.'
+      : 'Your Groq/OpenRouter rate limit hit — that cap is set on YOUR account at console.groq.com. Upgrade there or wait ~30s.');
     throw new Error(err.error?.message||`API error: ${res.status}`);
   }
-  const data=await res.json();
-  return data.choices[0].message.content;
+  return (await res.json()).choices[0].message.content;
 }
 
 // Best-effort save of a conversation turn to PostgREST (Supabase-shaped).
@@ -1897,17 +1922,46 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   function payNowApp(tier){
     const link = tier === 'team' ? PAY_LINK_TEAM : PAY_LINK_PRO;
     if(!link){ alert('Payment link not set yet. Joseph: paste your Stripe/PayPal link in PAY_LINK_'+ (tier==='team'?'TEAM':'PRO') +' in config.js.'); return; }
-    // Local gate: we can't verify payment server-side yet (no webhook).
-    // Confirm with the user, then activate Pro locally and persist it.
-    const ok = confirm('You\'ll be taken to checkout. After paying, Pro mode activates on THIS device.\n\nContinue to Stripe?');
+    // Hosted path: customer pays -> we verify via webhook before unlocking.
+    const ok = confirm('You\'ll be taken to checkout for the '+(tier==='team'?'Team ($49/mo)':'Pro ($19/mo)')+' plan.\nAfter paying, come back here and Pro activates automatically.\n\nContinue to Stripe?');
     if(!ok) return;
-    if(tier==='pro'){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); }
-    // Navigate in the same tab so the user clearly lands on the correct checkout
+    // Mark intent + go to checkout. Activation happens on webhook return (verifyPayment).
+    sessionStorage.setItem('pending_tier', tier);
     window.location.href = link;
   }
   function openPayApp(tier,label){ payNowApp(tier); }
   // Called when returning from checkout (or manually) to ensure Pro state sticks.
-  function activatePro(){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); toast('✨ Pro mode active — using YOUR API key, your cost.'); }
+  function activatePro(){
+    PLAN='pro'; PRO_PATH='hosted';
+    localStorage.setItem('plan','pro'); localStorage.setItem('pro_path','hosted');
+    updateModeBadge(); toast('✨ Pro active — we host the AI for you.');
+  }
+  // BYOK: customer pasted their own key -> free Pro, no subscription.
+  function activateBYOK(){
+    const k = document.getElementById('groq-key-input').value.trim();
+    if(!k){ alert('Please paste your Groq key in the "Groq API Key" box above first (get one free at console.groq.com).'); return; }
+    PLAN='pro'; PRO_PATH='byok'; AI_MODE='gemma'; GROQ_KEY=k;
+    localStorage.setItem('plan','pro'); localStorage.setItem('pro_path','byok');
+    localStorage.setItem('groq_key',k); localStorage.setItem('ai_mode','gemma');
+    updateModeBadge(); toast('✨ Pro active (Bring-Your-Own-Key) — your key, your cost.');
+  }
+  // Verify payment via webhook (called on return from Stripe). Falls back to manual if webhook down.
+  async function verifyPayment(){
+    const tier = sessionStorage.getItem('pending_tier');
+    if(!tier) return;
+    if(typeof PRO_WEBHOOK!=='undefined' && PRO_WEBHOOK){
+      try{
+        const r = await fetch(PRO_WEBHOOK+'?tier='+tier+'&uid='+encodeURIComponent(localStorage.getItem('uid')||''),{method:'POST'});
+        const d = await r.json().catch(()=>({}));
+        if(d.ok){ activatePro(); sessionStorage.removeItem('pending_tier'); return; }
+      }catch(e){ /* webhook unreachable -> manual fallback below */ }
+    }
+    // Fallback: show manual activate (trust-based) if webhook unavailable.
+    document.getElementById('pro-activate-btn').style.display='block';
+  }
+  // On load, if we just returned from checkout, verify.
+  window.addEventListener('load', ()=>{ if(sessionStorage.getItem('pending_tier')) verifyPayment(); });
+
 </script>
 </body>
 </html>

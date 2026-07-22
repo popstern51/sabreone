@@ -19,7 +19,15 @@ const CONTACT_EMAIL = "jortiz92770@gmail.com";
 //  Later, swap these to the OCI gateway URL when the cloud backend is live.
 //  Joseph: leave as-is unless SabreJoe tells you to change it.
 // ============================================================
-// Pro mode = BYOK: the CUSTOMER's own API key bills the CUSTOMER. Joseph pays $0 LLM tokens.
-// callAIPro() now hits the Groq cloud with the key from user Settings — localhost no longer used.
-const PRO_BACKEND = "https://api.groq.com/openai/v1/chat/completions"; // unused default; real key comes from user Settings
-const PRO_DB = "http://localhost:3000/chat_history"; // legacy; persistChat disabled
+// ============================================================
+//  PRO MODE — two paths (Joseph edits THIS file only)
+//  BYOK (default): customer pastes their own Groq key -> they pay their provider, Joseph $0.
+//  HOSTED: Joseph pays for a shared Groq key; customer just subscribes $19/$49 (no key needed).
+//  Set JOSEPH_PRO_KEY to your Groq key to ENABLE the hosted path. Leave '' to offer BYOK only.
+// ============================================================
+const PRO_BACKEND = "https://api.groq.com/openai/v1/chat/completions";
+// Joseph's hosted Pro key (used ONLY when customer picks "Subscribe" instead of BYOK).
+// Get one free at console.groq.com. This is server-side; never shown to customers.
+const JOSEPH_PRO_KEY = "";
+// Stripe webhook endpoint (EC2). Verifies payment before Pro unlocks. Leave '' to skip verification.
+const PRO_WEBHOOK = "http://184.73.61.6:8899/verify";
