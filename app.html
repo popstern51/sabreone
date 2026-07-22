@@ -1495,15 +1495,23 @@ async function uploadDoc(inp){
     toast('📎 '+f.name+' added — the agent can now read it');
     if(S.picked?.id===CA?.id)rBuild();
   };
+  const imgFinish=(dataURL)=>{ S.imgs[CA?.id||'up']=dataURL; showImgPreview(dataURL,f.name); };
   try{
     if(isPdf&&window.pdfjsLib){ return finish(await extractPDF(f)); }
     if(isDocx&&window.mammoth){ return finish(await extractDocx(f)); }
     if(isXls&&window.XLSX){ return finish(await extractXLSX(f)); }
-    if((isImg)&&window.Tesseract){ return finish(await extractImage(f)); }
+    if(isImg){
+      const r=new FileReader();
+      r.onload=e=>{ imgFinish(e.target.result);
+        if(window.Tesseract){ Tesseract.recognize(f,'eng').then(({data:{text}})=>{ const ocr=(text||'').trim(); S.docs.push({name:'[image] '+f.name, text: ocr?('[Text detected in image]\n'+ocr.slice(0,8000)):'[Image uploaded — no text detected by OCR]'}); toast('📎 '+f.name+' added — the agent can now read it'); }); }
+        else { S.docs.push({name:'[image] '+f.name, text:'[Image uploaded]'}); }
+      };
+      r.readAsDataURL(f); return;
+    }
     if(isDoc){ // legacy .doc — no free parser; best-effort text scrape
       const r=new FileReader();r.onload=e=>finish(String(e.target.result||'').replace(/[^\x20-\x7E\n\r ]/g,' '));r.readAsBinaryString(f);return;
     }
-    if(isText||isImg){ const r=new FileReader();r.onload=e=>finish(String(e.target.result||''));r.readAsText(f);return; }
+    if(isText){ const r=new FileReader();r.onload=e=>finish(String(e.target.result||''));r.readAsText(f);return; }
     // Unknown type → try plain text read
     const r=new FileReader();r.onload=e=>finish(String(e.target.result||'').slice(0,12000));r.readAsText(f);
   }catch(err){
@@ -1514,8 +1522,8 @@ async function uploadDoc(inp){
 function docsContext(){
   if(!S.docs.length)return '';
   const body=S.docs.map(d=>'['+d.name+']\n'+d.text).join('\n\n');
-  // Cap total injected context to ~4000 chars to respect Groq free-tier TPM limits
-  const capped=body.length>4000?body.slice(0,4000)+'\n…[document truncated to fit token limit]':'body';
+  // Cap total injected context to ~8000 chars to respect Groq free-tier TPM limits
+  const capped=body.length>8000?body.slice(0,8000)+'\n…[document truncated to fit token limit]':body;
   return '\n\n=== USER UPLOADED DOCUMENTS (reference these when relevant) ===\n'+capped;
 }
 
