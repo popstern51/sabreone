@@ -1036,16 +1036,39 @@ function openSettings(){
   document.getElementById('settings-modal').style.display='flex';
 }
 
+// Test a Groq key with a 1-token call so we can tell the user WHY it fails (not just "activate the key").
+async function validateGroqKey(key, model){
+  try{
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key.trim()}`},
+      body:JSON.stringify({model:model,messages:[{role:'system',content:'ping'},{role:'user',content:'hi'}],max_tokens:1})
+    });
+    if(res.ok) return {ok:true};
+    const err=await res.json().catch(()=>({}));
+    const msg=err.error?.message||'';
+    if(res.status===401) return {ok:false, msg:'Invalid key — it was rejected by Groq. Double-check you copied the full key (starts with gsk_) from console.groq.com.'};
+    if(res.status===429) return {ok:false, msg:'Your Groq free-tier limit is hit. Groq resets limits often within the hour — or upgrade your Groq plan. Your key is fine.'};
+    if(res.status===404) return {ok:false, msg:'That model isn\'t available on your Groq account. Pick "Llama 4 Scout" (the default) in the Model dropdown.'};
+    return {ok:false, msg: msg|| ('Groq returned '+res.status+'. Try again or pick a different model.')};
+  }catch(e){ return {ok:false, msg:'Could not reach Groq ('+e.message+'). Check your internet connection.'}; }
+}
+
 function saveSettings(){
   const key=document.getElementById('groq-key-input').value.trim();
   const model=document.getElementById('model-select').value;
   if(!key){toast('Please enter an API key');return;}
-  GROQ_KEY=key;AI_MODEL=model;AI_MODE='gemma';
-  localStorage.setItem('groq_key',key);
-  localStorage.setItem('ai_model',model);
-  localStorage.setItem('ai_mode','gemma');
-  updateModeBadge();
-  toast(`✨ ${model} activated`);
+  // Validate live so the user knows immediately if the key works (no silent chat failures).
+  toast('Checking your key…');
+  validateGroqKey(key,model).then(v=>{
+    if(!v.ok){ alert('⚠️ Key not accepted:\n\n'+v.msg); return; }
+    GROQ_KEY=key;AI_MODEL=model;AI_MODE='gemma';
+    localStorage.setItem('groq_key',key);
+    localStorage.setItem('ai_model',model);
+    localStorage.setItem('ai_mode','gemma');
+    updateModeBadge();
+    toast('✅ Key works — real AI is now active!');
+  });
 }
 
 function saveEmailSettings(){
@@ -1793,7 +1816,12 @@ async function send(){
   const docCtx=docsContext();
   if(AI_MODE==='gemma'){
     try{response=await callAI(CH,buildPrompt(),imgForVision,docCtx);}
-    catch(e){hideTyping();addMsg('agent',`⚠️ ${e.message}\n\nYou can update your API key by clicking the badge in the top-right corner.`);return;}
+    catch(e){hideTyping();
+      let hint='You can update your API key by clicking the badge in the top-right corner.';
+      if(/401|Invalid/.test(e.message))hint='Your key was rejected by Groq. Open Settings → re-paste your key from console.groq.com → Save.';
+      else if(/429|limit/.test(e.message))hint='Your Groq free-tier limit is hit. It usually resets within the hour — or switch to Bring-Your-Own-Key with a fresh key.';
+      else if(/404|model/.test(e.message))hint='That model isn\'t on your Groq plan. In Settings, set Model to "Llama 4 Scout" (default).';
+      addMsg('agent',`⚠️ ${e.message}\n\n${hint}`);return;}
   }else{
     await new Promise(r=>setTimeout(r,900));
     response=demoAI(txt,CA);
