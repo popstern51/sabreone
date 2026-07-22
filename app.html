@@ -19,6 +19,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Barlow:wght@300;400;500;600&display=swap');
 :root{
@@ -517,7 +520,7 @@ textarea{resize:none;}
         <button class="btn btn-o btn-sm" onclick="document.getElementById('doc-upload').click()" style="padding:11px 11px;flex-shrink:0;" title="Upload a document for the agent to read">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
-        <input type="file" id="doc-upload" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" style="display:none" onchange="uploadDoc(this)">
+        <input type="file" id="doc-upload" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.webp,.tif,.tiff,.ppt,.pptx,.rtf,.odt,image/*" style="display:none" onchange="uploadDoc(this)">
         <button class="btn btn-o btn-sm" onclick="openEmailComposer()" style="padding:11px 11px;flex-shrink:0;" title="Compose email">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
         </button>
@@ -1410,24 +1413,67 @@ function rGrid(){
 function pickAg(id){S.picked=AGENTS.find(a=>a.id===id);rGrid();}
 function upImg(id,inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{S.imgs[id]=e.target.result;if(S.picked?.id===id)rBuild();rGrid();};r.readAsDataURL(f);}
 
-// ── Document upload: read file text client-side, attach as agent context ──
-function uploadDoc(inp){
+// ── Document upload: REAL parsing client-side so the agent can read ANY file ──
+// pdf.js worker
+if(window['pdfjsLib']){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+
+async function extractPDF(f){
+  const buf=await f.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let out='';
+  for(let i=1;i<=Math.min(pdf.numPages,40);i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    out+=(tc.items.map(it=>it.str).join(' '))+'\n';
+  }
+  return out.trim();
+}
+async function extractDocx(f){
+  const arr=await f.arrayBuffer();
+  const res=await mammoth.extractRawText({arrayBuffer:arr});
+  return res.value.trim();
+}
+async function extractXLSX(f){
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+  let out='';
+  wb.SheetNames.forEach(n=>{ out+='\n['+n+']\n'+XLSX.utils.sheet_to_csv(wb.Sheets[n]); });
+  return out.trim();
+}
+async function extractImage(f){
+  const {data:{text}}=await Tesseract.recognize(f,'eng');
+  return '[OCR text from image]\n'+text.trim();
+}
+
+async function uploadDoc(inp){
   const f=inp.files[0];if(!f)return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    let text=String(e.target.result||'');
-    // crude PDF text extraction (strips to readable strings)
-    if(f.name.toLowerCase().endsWith('.pdf')){
-      const m=text.match(/[A-Za-z0-9 ,.;:!?()'"\-]{4,}/g);
-      text=m?m.join(' '):'';
-    }
-    const cap=text.slice(0,12000);
+  const nm=f.name.toLowerCase();
+  const isImg=/\.(png|jpe?g|gif|bmp|webp|tiff?)$/.test(nm);
+  const isPdf=nm.endsWith('.pdf'), isDocx=nm.endsWith('.docx'), isDoc=nm.endsWith('.doc');
+  const isXls=nm.endsWith('.xlsx')||nm.endsWith('.xls')||nm.endsWith('.csv');
+  const isText=/\.(txt|md|json|csv|text)$/.test(nm);
+  const needsWorker=isPdf||isDocx||isXls||isImg;
+  if(needsWorker) toast('📎 Reading '+f.name+'…');
+  const finish=(text)=>{
+    const cap=(text||'').slice(0,12000);
     S.docs.push({name:f.name,text:cap});
     toast('📎 '+f.name+' added — the agent can now read it');
     if(S.picked?.id===CA?.id)rBuild();
   };
-  if(f.name.toLowerCase().endsWith('.pdf'))reader.readAsBinaryString(f);
-  else reader.readAsText(f);
+  try{
+    if(isPdf&&window.pdfjsLib){ return finish(await extractPDF(f)); }
+    if(isDocx&&window.mammoth){ return finish(await extractDocx(f)); }
+    if(isXls&&window.XLSX){ return finish(await extractXLSX(f)); }
+    if((isImg)&&window.Tesseract){ return finish(await extractImage(f)); }
+    if(isDoc){ // legacy .doc — no free parser; best-effort text scrape
+      const r=new FileReader();r.onload=e=>finish(String(e.target.result||'').replace(/[^\x20-\x7E\n\r ]/g,' '));r.readAsBinaryString(f);return;
+    }
+    if(isText||isImg){ const r=new FileReader();r.onload=e=>finish(String(e.target.result||''));r.readAsText(f);return; }
+    // Unknown type → try plain text read
+    const r=new FileReader();r.onload=e=>finish(String(e.target.result||'').slice(0,12000));r.readAsText(f);
+  }catch(err){
+    // Fallback: raw text
+    const r=new FileReader();r.onload=e=>finish('[Could not parse '+f.name+' automatically — raw text shown]\n'+String(e.target.result||'').slice(0,6000));r.readAsText(f);
+  }
 }
 function docsContext(){
   if(!S.docs.length)return '';
