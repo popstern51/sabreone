@@ -203,7 +203,7 @@ textarea{resize:none;}
       <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:12px;">
       <div class="label" style="margin-bottom:8px;">Model</div>
       <select id="model-select" style="margin-bottom:18px;">
-        <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision • Free)</option>
+        <option value="llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision • Free)</option>
         <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Powerful, Free)</option>
         <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest, Free)</option>
         <option value="qwen/qwen3-32b">Qwen3 32B (Strong, Free)</option>
@@ -602,7 +602,7 @@ let S={filter:'all',picked:null,nm:'',imgs:{},docs:[],tasks:[],cat:'sch',bundle:
 let confirmCb=null;
 let AI_MODE='demo';
 let GROQ_KEY='';
-let AI_MODEL='meta-llama/llama-4-scout-17b-16e-instruct';
+let AI_MODEL='llama-4-scout-17b-16e-instruct';
 let PLAN='free'; // 'free' | 'pro' — Pro routes to local backend (Qwen/PostgREST)
 let EMAIL_CFG={publicKey:'',serviceId:'',templateId:'',fromEmail:''};
 let LAST_CHAT_CONTEXT='';
@@ -1136,7 +1136,7 @@ function loadSettings(){
   if(mode==='gemma'&&key){AI_MODE='gemma';GROQ_KEY=key;
     // Enforce Llama 4 Scout (vision + healthy free tier) as the default for all users,
     // including returning ones whose saved model may be the retired llama-3.3-70b-versatile.
-    AI_MODEL=(model&&model!=='llama-3.3-70b-versatile')?model:'meta-llama/llama-4-scout-17b-16e-instruct';
+    AI_MODEL=(model&&model!=='llama-3.3-70b-versatile'&&model!=='meta-llama/llama-4-scout-17b-16e-instruct')?model:'llama-4-scout-17b-16e-instruct';
     localStorage.setItem('ai_model',AI_MODEL);
   }
   else{AI_MODE='demo';}
