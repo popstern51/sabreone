@@ -31,3 +31,19 @@ const PRO_BACKEND = "https://api.groq.com/openai/v1/chat/completions";
 const JOSEPH_PRO_KEY = "";
 // Stripe webhook endpoint (EC2). Verifies payment before Pro unlocks. Leave '' to skip verification.
 const PRO_WEBHOOK = "http://184.73.61.6:8899/verify";
+
+// ============================================================
+//  MODEL HEALTH (self-healing watchdog)
+//  If Groq retires/deprecates a model (happened to Llama 4 Scout),
+//  the app auto-switches to the next live model on load — no broken chats.
+//  ORDER MATTERS: first model in MODEL_ALLOWLIST is the preferred default.
+//  To change the default, move a model to the front. All must be FREE on Groq.
+// ============================================================
+const MODEL_ALLOWLIST = [
+  "llama-3.3-70b-versatile",   // preferred (powerful, free)
+  "llama-3.1-8b-instant",       // fast fallback
+  "qwen/qwen3-32b",             // strong fallback
+  "openai/gpt-oss-20b"          // last resort
+];
+// How often (ms) the in-app watchdog re-checks while the tab stays open. 0 = on load only.
+const MODEL_HEALTH_INTERVAL = 0;

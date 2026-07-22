@@ -2045,11 +2045,43 @@ function extractJson(str){
 }
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 
+/* ══ MODEL HEALTH WATCHDOG (non-failing self-heal) ══
+   Detects a deprecated/retired Groq model BEFORE the user hits a broken chat.
+   Fail-open: any error -> do nothing, app keeps working on last-known-good model. */
+async function checkModelHealth(){
+  try{
+    const allow=window.MODEL_ALLOWLIST&&window.MODEL_ALLOWLIST.length?window.MODEL_ALLOWLIST:['llama-3.3-70b-versatile'];
+    const preferred=allow[0];
+    // Demo / no key: can't probe live. Just ensure we're not on a known-dead id.
+    if(AI_MODE!=='gemma'||!GROQ_KEY){
+      if(!allow.includes(AI_MODEL)){ AI_MODEL=preferred; localStorage.setItem('ai_model',preferred); }
+      return;
+    }
+    // Probe the active model with a 1-token call (reuses the user's key, CORS-safe).
+    const probe=async(m)=>{
+      const res=await fetch(PRO_BACKEND,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY.trim()}`},body:JSON.stringify({model:m,messages:[{role:'user',content:'ping'}],max_tokens:1})});
+      return res.status;
+    };
+    let live=false;
+    try{ live=(await probe(AI_MODEL))!==404; }catch(e){ live=true; } // network blip -> assume ok, don't thrash
+    if(live) return;
+    // Current model is dead (404). Walk the allowlist to find a live one.
+    for(const m of allow){
+      if(m===AI_MODEL) continue;
+      try{ if((await probe(m))!==404){ AI_MODEL=m; localStorage.setItem('ai_model',m); updateModeBadge(); toast('⚠️ Groq retired "'+ (arguments[0]||AI_MODEL) +'". Switched you to '+m+'.'); return; } }catch(e){}
+    }
+    // All dead? Fall back to preferred and warn.
+    AI_MODEL=preferred; localStorage.setItem('ai_model',preferred); updateModeBadge();
+    toast('⚠️ Your model was retired by Groq. Switched to '+preferred+' — if chats fail, re-test your key in Settings.');
+  }catch(e){ /* fail-open: never break boot */ }
+}
+
 /* ══ INIT ══ */
 (async()=>{
   initVideo();
   await hydrate();
   loadSettings();
+  checkModelHealth();   // self-heal before the user chats
   rfilt('all');
   if(window.speechSynthesis)window.speechSynthesis.getVoices();
   rHome();
