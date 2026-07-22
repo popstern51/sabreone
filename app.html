@@ -196,17 +196,17 @@ textarea{resize:none;}
     <div style="flex:1;overflow-y:auto;padding:22px;">
       <div class="label" style="margin-bottom:10px;">🤖 AI Model</div>
       <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:12px;font-weight:400;color:var(--grn);margin-bottom:6px;">✨ Free: Llama 4 Scout — sees images (vision) via Groq</div>
+        <div style="font-size:12px;font-weight:400;color:var(--grn);margin-bottom:6px;">✨ Free: Llama 3.3 70B — powerful, no cost, via Groq</div>
         <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;">Get your free key at <a href="https://console.groq.com" target="_blank" style="color:var(--grn);text-decoration:underline;">console.groq.com</a></div>
       </div>
       <div class="label" style="margin-bottom:8px;">Groq API Key</div>
       <input type="password" id="groq-key-input" placeholder="gsk_..." style="margin-bottom:12px;">
       <div class="label" style="margin-bottom:8px;">Model</div>
       <select id="model-select" style="margin-bottom:18px;">
-        <option value="llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision • Free)</option>
         <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Powerful, Free)</option>
         <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest, Free)</option>
         <option value="qwen/qwen3-32b">Qwen3 32B (Strong, Free)</option>
+        <option value="openai/gpt-oss-20b">GPT OSS 20B (Free)</option>
       </select>
       <button class="btn btn-w w100" onclick="saveSettings()" style="margin-bottom:8px;">Save AI Settings</button>
       <button class="btn btn-o w100" onclick="testKey()" style="margin-bottom:22px;">🔑 Test key</button>
@@ -604,7 +604,7 @@ let S={filter:'all',picked:null,nm:'',imgs:{},docs:[],tasks:[],cat:'sch',bundle:
 let confirmCb=null;
 let AI_MODE='demo';
 let GROQ_KEY='';
-let AI_MODEL='llama-4-scout-17b-16e-instruct';
+let AI_MODEL='llama-3.3-70b-versatile';
 let PLAN='free'; // 'free' | 'pro' — Pro routes to local backend (Qwen/PostgREST)
 let EMAIL_CFG={publicKey:'',serviceId:'',templateId:'',fromEmail:''};
 let LAST_CHAT_CONTEXT='';
@@ -1040,18 +1040,25 @@ function openSettings(){
 
 // Test a Groq key with a 1-token call so we can tell the user WHY it fails (not just "activate the key").
 async function validateGroqKey(key, model){
-  try{
+  const FALLBACK='llama-3.3-70b-versatile'; // known-live on Groq free tier
+  async function tryModel(m){
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${key.trim()}`},
-      body:JSON.stringify({model:model,messages:[{role:'system',content:'ping'},{role:'user',content:'hi'}],max_tokens:1})
+      body:JSON.stringify({model:m,messages:[{role:'system',content:'ping'},{role:'user',content:'hi'}],max_tokens:1})
     });
-    if(res.ok) return {ok:true};
+    return res;
+  }
+  try{
+    let res=await tryModel(model);
+    // If the selected model is gone (404), retry with the known-good fallback before failing.
+    if(res.status===404 && model!==FALLBACK){ res=await tryModel(FALLBACK); if(res.ok) return {ok:true, model:FALLBACK}; }
+    if(res.ok) return {ok:true, model};
     const err=await res.json().catch(()=>({}));
     const msg=err.error?.message||'';
     if(res.status===401) return {ok:false, msg:'Invalid key — it was rejected by Groq. Double-check you copied the full key (starts with gsk_) from console.groq.com.'};
     if(res.status===429) return {ok:false, msg:'Your Groq free-tier limit is hit. Groq resets limits often within the hour — or upgrade your Groq plan. Your key is fine.'};
-    if(res.status===404) return {ok:false, msg:'That model isn\'t available on your Groq account. Pick "Llama 4 Scout" (the default) in the Model dropdown.'};
+    if(res.status===404) return {ok:false, msg:'That model isn\'t available on Groq anymore. Pick "Llama 3.3 70B" (the default) in the Model dropdown.'};
     return {ok:false, msg: msg|| ('Groq returned '+res.status+'. Try again or pick a different model.')};
   }catch(e){ return {ok:false, msg:'Could not reach Groq ('+e.message+'). Check your internet connection.'}; }
 }
@@ -1064,9 +1071,10 @@ function saveSettings(){
   toast('Checking your key…');
   validateGroqKey(key,model).then(v=>{
     if(!v.ok){ alert('⚠️ Key not accepted:\n\n'+v.msg); return; }
-    GROQ_KEY=key;AI_MODEL=model;AI_MODE='gemma';
+    const finalModel=v.model||model;
+    GROQ_KEY=key;AI_MODEL=finalModel;AI_MODE='gemma';
     localStorage.setItem('groq_key',key);
-    localStorage.setItem('ai_model',model);
+    localStorage.setItem('ai_model',finalModel);
     localStorage.setItem('ai_mode','gemma');
     updateModeBadge();
     toast('✅ Key works — real AI is now active!');
@@ -1149,9 +1157,8 @@ function loadSettings(){
   const model=localStorage.getItem('ai_model');
   const emailCfg=localStorage.getItem('email_cfg');
   if(mode==='gemma'&&key){AI_MODE='gemma';GROQ_KEY=key;
-    // Enforce Llama 4 Scout (vision + healthy free tier) as the default for all users,
-    // including returning ones whose saved model may be the retired llama-3.3-70b-versatile.
-    AI_MODEL=(model&&model!=='llama-3.3-70b-versatile'&&model!=='meta-llama/llama-4-scout-17b-16e-instruct')?model:'llama-4-scout-17b-16e-instruct';
+    // Reject retired/dead model ids; default to the live llama-3.3-70b-versatile.
+    AI_MODEL=(model&&model!=='llama-3.3-70b-versatile'&&model!=='meta-llama/llama-4-scout-17b-16e-instruct'&&model!=='llama-4-scout-17b-16e-instruct')?model:'llama-3.3-70b-versatile';
     localStorage.setItem('ai_model',AI_MODEL);
   }
   else{AI_MODE='demo';}
@@ -1835,7 +1842,7 @@ async function send(){
       let hint='You can update your API key by clicking the badge in the top-right corner.';
       if(/401|Invalid/.test(e.message))hint='Your key was rejected by Groq. Open Settings → re-paste your key from console.groq.com → Save.';
       else if(/429|limit/.test(e.message))hint='Your Groq free-tier limit is hit. It usually resets within the hour — or switch to Bring-Your-Own-Key with a fresh key.';
-      else if(/404|model/.test(e.message))hint='That model isn\'t on your Groq plan. In Settings, set Model to "Llama 4 Scout" (default).';
+      else if(/404|model/.test(e.message))hint='That model isn\'t on your Groq plan. In Settings, set Model to "Llama 3.3 70B" (default).';
       addMsg('agent',`⚠️ ${e.message}\n\n${hint}`);return;}
   }else{
     await new Promise(r=>setTimeout(r,900));
