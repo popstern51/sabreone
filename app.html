@@ -208,7 +208,9 @@ textarea{resize:none;}
         <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest, Free)</option>
         <option value="qwen/qwen3-32b">Qwen3 32B (Strong, Free)</option>
       </select>
-      <button class="btn btn-w w100" onclick="saveSettings()" style="margin-bottom:22px;">Save AI Settings</button>
+      <button class="btn btn-w w100" onclick="saveSettings()" style="margin-bottom:8px;">Save AI Settings</button>
+      <button class="btn btn-o w100" onclick="testKey()" style="margin-bottom:22px;">🔑 Test key</button>
+      <div id="key-test-result" style="font-size:11px;font-weight:400;margin:-14px 0 18px;line-height:1.5;display:none;"></div>
 
       <div class="divider"></div>
 
@@ -1068,6 +1070,19 @@ function saveSettings(){
     localStorage.setItem('ai_mode','gemma');
     updateModeBadge();
     toast('✅ Key works — real AI is now active!');
+  });
+}
+
+// Test the key currently in the box WITHOUT saving — instant ✅/❌ feedback.
+function testKey(){
+  const key=document.getElementById('groq-key-input').value.trim();
+  const model=document.getElementById('model-select').value;
+  const box=document.getElementById('key-test-result');
+  if(!key){ box.style.display='block'; box.style.color='var(--gold)'; box.textContent='Paste a key in the box above first, then click Test key.'; return; }
+  box.style.display='block'; box.style.color='var(--t2)'; box.textContent='Testing…';
+  validateGroqKey(key,model).then(v=>{
+    if(v.ok){ box.style.color='var(--grn)'; box.textContent='✅ Key works! Click "Save AI Settings" to activate real AI.'; }
+    else{ box.style.color='#f87171'; box.textContent='❌ '+v.msg; }
   });
 }
 
