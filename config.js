@@ -19,7 +19,7 @@ const CONTACT_EMAIL = "jortiz92770@gmail.com";
 //  Later, swap these to the OCI gateway URL when the cloud backend is live.
 //  Joseph: leave as-is unless SabreJoe tells you to change it.
 // ============================================================
-// Local LLM brain (OpenAI-compatible). LM Studio serves Qwen 3.5 9B here.
-const PRO_BACKEND = "http://localhost:1234/v1/chat/completions";
-// Local Supabase-shaped REST (PostgREST) for persistent chat history.
-const PRO_DB = "http://localhost:3000/chat_history";
+// Pro mode = BYOK: the CUSTOMER's own API key bills the CUSTOMER. Joseph pays $0 LLM tokens.
+// callAIPro() now hits the Groq cloud with the key from user Settings — localhost no longer used.
+const PRO_BACKEND = "https://api.groq.com/openai/v1/chat/completions"; // unused default; real key comes from user Settings
+const PRO_DB = "http://localhost:3000/chat_history"; // legacy; persistChat disabled

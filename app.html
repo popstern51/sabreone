@@ -215,7 +215,7 @@ textarea{resize:none;}
       <div class="label" style="margin-bottom:10px;">⭐ Upgrade</div>
       <div style="background:rgba(224,185,79,.08);border:1px solid rgba(224,185,79,.25);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div style="font-size:13px;font-weight:400;color:var(--gold);margin-bottom:6px;">SabreOne™ Pro — $19/mo</div>
-        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM (your local Qwen brain), persistent memory, email outreach, voice. Offered by a NJ sole proprietor.</div>
+        <div style="font-size:11px;font-weight:300;color:var(--t2);line-height:1.6;margin-bottom:10px;">Unlimited agents, real LLM via YOUR OWN API key, persistent memory, email outreach, voice. Your key, your cost — we never see your bill. Offered by a NJ sole proprietor.</div>
         <div id="pro-status" style="font-size:11px;font-weight:400;margin-bottom:10px;color:var(--grn);"></div>
         <button class="btn btn-w w100" id="pro-btn" onclick="openPayApp('pro','Pro')">Upgrade to Pro →</button>
         <button class="btn btn-ghost w100" id="pro-activate-btn" style="display:none;margin-top:8px;" onclick="activatePro()">✓ I've paid — Activate Pro</button>
@@ -1055,7 +1055,7 @@ function updateModeBadge(){
   const badge=document.getElementById('mode-badge');
   if(PLAN==='pro'){
     badge.className='mode-badge pro';
-    badge.innerHTML='⚡ Pro · Local Qwen';
+    badge.innerHTML='⚡ Pro · Your Key';
     return;
   }
   if(AI_MODE==='gemma'){
@@ -1075,7 +1075,7 @@ function refreshProUI(){
   const act=document.getElementById('pro-activate-btn');
   if(!status)return;
   if(PLAN==='pro'){
-    status.textContent='✓ Pro active — routing to your local Qwen brain.';
+    status.textContent='✓ Pro active — using YOUR own API key. You pay Groq/OpenRouter directly, never SabreOne.';
     status.style.color='var(--grn)';
     if(btn)btn.style.display='none';
     if(act)act.style.display='none';
@@ -1142,10 +1142,11 @@ async function callAI(messages,systemPrompt,imageDataUrl,docCtx){
 }
 
 /* ══ PRO MODE AI CALL (local backend: LM Studio Qwen + PostgREST) ══ */
+// Pro = BYOK: the CUSTOMER's own API key bills the CUSTOMER. Joseph pays $0 in tokens.
 async function callAIPro(messages,systemPrompt,imageDataUrl,docCtx){
+  if(!GROQ_KEY){ throw new Error('No API key set. Open Settings → paste your Groq (or OpenRouter) key. Pro uses YOUR key, so YOU control the cost — SabreOne never sees your bill.'); }
   const sysPrompt=systemPrompt+(docCtx?docCtx:'');
-  // Pro has no TPM cap — send fuller history, but still bound to keep latency sane.
-  const trimmed=messages.slice(-25);
+  const trimmed=messages.slice(-25); // Pro: fuller history, still bounded for latency
   let userMessages=trimmed;
   if(imageDataUrl){
     userMessages=trimmed.map(m=>{
@@ -1157,25 +1158,19 @@ async function callAIPro(messages,systemPrompt,imageDataUrl,docCtx){
     });
   }
   const fullMessages=[{role:'system',content:sysPrompt},...userMessages];
-  let res;
-  try{
-    res=await fetch(PRO_BACKEND,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'qwen/qwen3.5-9b',messages:fullMessages,temperature:0.7,max_tokens:1500})
-    });
-  }catch(e){
-    throw new Error('Pro backend unreachable at '+PRO_BACKEND+'. Is LM Studio running on :1234? Start it, then retry.');
-  }
+  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY}`},
+    body:JSON.stringify({model:AI_MODEL,messages:fullMessages,temperature:0.7,max_tokens:1500})
+  });
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
-    throw new Error(err.error?.message||`Pro API error: ${res.status}`);
+    if(res.status===401)throw new Error('Invalid API key. Check Settings.');
+    if(res.status===429)throw new Error('Your Groq/OpenRouter rate limit hit — that cap is set on YOUR account at console.groq.com. Upgrade there or wait ~30s.');
+    throw new Error(err.error?.message||`API error: ${res.status}`);
   }
   const data=await res.json();
-  const reply=data.choices[0].message.content;
-  // Persist to local Supabase-shaped history (best-effort; never block the reply).
-  persistChat('pro',fullMessages.concat([{role:'assistant',content:reply}])).catch(()=>{});
-  return reply;
+  return data.choices[0].message.content;
 }
 
 // Best-effort save of a conversation turn to PostgREST (Supabase-shaped).
@@ -1912,7 +1907,7 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
   }
   function openPayApp(tier,label){ payNowApp(tier); }
   // Called when returning from checkout (or manually) to ensure Pro state sticks.
-  function activatePro(){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); toast('✨ Pro mode active — routing to your local Qwen brain.'); }
+  function activatePro(){ PLAN='pro'; localStorage.setItem('plan','pro'); updateModeBadge(); toast('✨ Pro mode active — using YOUR API key, your cost.'); }
 </script>
 </body>
 </html>
